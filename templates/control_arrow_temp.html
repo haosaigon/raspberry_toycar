@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Toy Car Controller</title>
+<style>
+  body { font-family: Arial; text-align: center; margin-top: 40px; }
+  h2 { margin-bottom: 20px; }
+  .controller {
+    display: inline-grid;
+    grid-template-columns: 80px 80px 80px;
+    gap: 10px;
+  }
+  button {
+    width: 80px; height: 80px;
+    font-size: 20px;
+    cursor: pointer;
+  }
+  #status {
+    margin-top: 20px;
+    font-size: 16px;
+    color: #333;
+  }
+</style>
+</head>
+<body>
+  <h2>Toy Car Controller</h2>
+  <div class="controller">
+    <div></div>
+    <button id="up">↑</button>
+    <div></div>
+
+    <button id="left">←</button>
+    <button id="down">↓</button>
+    <button id="right">→</button>
+  </div>
+
+  <div id="status">Speed: 0 | Turn: 0</div>
+
+  <script>
+    let speed = 0;
+    let turn = 0;
+
+    const updateStatus = () => {
+      document.getElementById("status").innerText = `Speed: ${speed} | Turn: ${turn}`;
+    };
+
+    const sendControl = async () => {
+      await fetch('/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ speed, turn })
+      });
+    };
+
+    const handleKey = (key, isDown = true) => {
+      if (!isDown) return;
+
+      switch (key) {
+        case 'ArrowUp':
+          speed = Math.min(speed + 20, 100);
+          break;
+        case 'ArrowDown':
+          speed = Math.max(speed - 20, -100);
+          break;
+        case 'ArrowLeft':
+          turn = Math.max(turn - 10, -45);
+          break;
+        case 'ArrowRight':
+          turn = Math.min(turn + 10, 45);
+          break;
+        case ' ':
+          speed = 0; turn = 0;
+          break;
+      }
+      updateStatus();
+      sendControl();
+    };
+
+    // Keyboard controls
+    document.addEventListener('keydown', e => handleKey(e.key));
+
+    // Button controls
+    document.getElementById('up').onclick = () => handleKey('ArrowUp');
+    document.getElementById('down').onclick = () => handleKey('ArrowDown');
+    document.getElementById('left').onclick = () => handleKey('ArrowLeft');
+    document.getElementById('right').onclick = () => handleKey('ArrowRight');
+  </script>
+</body>
+</html>
