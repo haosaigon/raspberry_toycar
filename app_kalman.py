@@ -1,6 +1,8 @@
 from flask import Flask, render_template, request, jsonify
 import pigpio
 from kalman_filter import KalmanFilter
+from servo_control_loop import servo_control
+from map_degree_pwm import map_value
 import math
 import threading
 import time
@@ -21,11 +23,7 @@ GEAR_SERVO = 13
 pi.set_mode(STEERING_SERVO, pigpio.OUTPUT)
 pi.set_mode(SPEED_SERVO, pigpio.OUTPUT)
 pi.set_mode(GEAR_SERVO, pigpio.OUTPUT)
-# Helper to map value to pulse width (µs)
-def map_value(x, in_min, in_max, out_min, out_max):
-    value = int((x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min)
-    return value
-#        if value > 1500 and value :
+# Fix the pwm of Traxxas motor
 def map_value_speed(x):
     if x > 0:
         x = 1568 + x
@@ -35,23 +33,7 @@ def map_value_speed(x):
         x = 1500
     print("speed pulse:", x)
     return x
-#Control steering angle depend on speed
-#def max_steering_angle(speed_pulse, turn_pulse, wheelbase_m=0.25, mu=0.9):
-#    #convert units
-#    pi = math.pi
-#    speed = 0.1*(speed_pulse-1500)/3.6 #PWM to m/s
-#    turn_angle = (turn_pulse -1500)*pi/1000 # convert PWM to radian
-#    turn_angle_deg =  180*turn_angle/math.pi
-#    print("Turn angle:", turn_angle_deg)
-#    g = 9.81
-#    max_turn_angle = math.atan((mu*g*wheelbase_m)/(speed*speed))
-#    print("max turn angle:", max_turn_angle)
-#    max_turn_pulse = (1000*max_turn_angle/pi) + 1500
-#    if  turn_angle < max_turn_angle:
-#        return turn_angle_deg
-#    else:
-#        print(max_turn_pulse)
-#        return max_turn_pulse
+
 # Kalman filters for speed and steering
 speed_filter = KalmanFilter(process_variance=0.01, measurement_variance=0.1)
 turn_filter = KalmanFilter(process_variance=0.01, measurement_variance=0.1)
@@ -76,7 +58,6 @@ def control():
     raw_turn = float(data.get('turn', 0))
     raw_gear = float(data.get('gear', 0))
     # Apply Kalman filters
-    #filtered_speed = speed_filter.update(raw_speed)
     filtered_turn = turn_filter.update(raw_turn)
     # Update car state
     car_state["speed"] = raw_speed
@@ -86,22 +67,21 @@ def control():
     car_state["turn"] = filtered_turn
 
     # Convert filtered values to servo pulsewidth
-#    speed_pulse = map_value(raw_speed, -100, 100, 1000, 2000)
-    turn_pulse = map_value(raw_turn, -45, 45, 1000, 2000)
+    turn_pulse = map_value(filtered_turn, -45, 45, 1000, 2000)
     print("Turn pulse:", turn_pulse)
     gear_pulse = map_value(raw_gear, -100, 100, 1000, 2000)
     speed_pulse = map_value_speed(raw_speed)
-#    turn_pulse = map_value(filtered_turn)
-#    gear_pulse = map_value(raw_gear)
     # Send PWM signals to servos
     pi.set_servo_pulsewidth(SPEED_SERVO, speed_pulse)
-    pi.set_servo_pulsewidth(STEERING_SERVO, turn_pulse)
+#    pi.set_servo_pulsewidth(STEERING_SERVO, turn_pulse)
     pi.set_servo_pulsewidth(GEAR_SERVO, gear_pulse)
+# Set steering servo
+    servo_control(STEERING_SERVO, raw_turn)
     print(f"[Filtered] Speed: {raw_speed:.2f} | Turn: {raw_turn:.2f} | Gear: {raw_gear:.2f}")
-#    with open("car_log.txt", "a") as f:
-#        log_line = f"[Filtered] Speed: {raw_speed:.2f} | Turn: {raw_turn:.2f} | Gear: {raw_gear:.2f}\n"
-#        f.write(log_line)
-#        print(log_line, end="")
+    with open("car_log.txt", "a") as f:
+        log_line = f"[Filtered] Speed: {raw_speed:.2f} | Turn: {raw_turn:.2f} | Gear: {raw_gear:.2f}\n"
+        f.write(log_line)
+        print(log_line, end="")
     logging.basicConfig(
         filename="car_log.txt",
         level=logging.INFO,
